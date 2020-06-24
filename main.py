@@ -1,0 +1,617 @@
+from helper import *
+from difflib import SequenceMatcher
+import networkx as nx
+import numpy as np
+import random
+# from clique_iterative_solver import *
+# from clique_solve_trial import *
+import sys
+import csv
+#sys.path.insert(1, '../code')
+#from improved_measurements import *
+from dbs_and_measurements import *
+import pdb
+import time
+
+#from sage.all import *
+#from sage.modules.free_module_integer import IntegerLattice
+#from fpylll import *
+
+# number of volumes that must be common to two solutions in order to regard them 'parallel'
+INTERSECTION_THRESHOLD = 3
+# only cliques of legitimate size are 'expanded', i.e. if a node
+# outside of the clique is highly connected to the clique,
+# the node will be added to the clique
+LEGITIMATE_CLIQUE_SIZE = 8 # subject to change during the execution
+# if a node is connected to all but (EXPANSION_TOLERANCE) number
+# of nodes in some clique, connect it with the rest
+EXPANSION_TOLERANCE = 1
+
+VOLUME_LOWER_BOUND = 5
+VOLUME_UPPER_BOUND = 100000
+
+NOISE_BUDGET = 0
+NEW_VOLS_LIMIT = 4
+
+# number of keys
+N = 12
+
+# Lenght of database
+db_len = 100000
+
+# volumes
+volumes = []
+volumes_noisy = []
+
+
+# find the longest common subsequence of two lists
+# returns their match both aligned similarly, and reversely
+def find_lcs(primary, secondary):
+    r_secondary = secondary[:]
+    r_secondary.reverse()
+    match1 = match_sequences(primary, secondary, NOISE_BUDGET)
+    match2 = match_sequences(primary, r_secondary, NOISE_BUDGET)
+    return (match1, match2)
+
+# Find if two values are approximitely equal
+def aprox_equal(val1, val2, noise_budget=0.0):
+    if abs(val1-val2) <= min(val1,val2) * noise_budget:
+        return True
+    return False
+
+# Returns length of longest common  
+# substring of X[0..m-1] and Y[0..n-1]  
+def LCSubStr(X, Y, noise_budget=0.0): 
+    m = len(X)
+    n = len(Y)
+    LCSuff = [[[0,0,0] for k in range(n+1)] for l in range(m+1)] 
+    matching_blocks_dict = {}
+            
+    # Following steps to build 
+    # LCSuff[m+1][n+1] in bottom up fashion 
+    for i in range(m + 1): 
+        for j in range(n + 1): 
+            if (i == 0 or j == 0): 
+                LCSuff[i][j][0] = 0
+                LCSuff[i][j][1] = i
+                LCSuff[i][j][2] = j
+            #elif (X[i-1] == Y[j-1]):
+            elif(aprox_equal(X[i-1], Y[j-1], noise_budget)):
+                LCSuff[i][j][0] = LCSuff[i-1][j-1][0] + 1
+                LCSuff[i][j][1] = LCSuff[i-1][j-1][1]
+                LCSuff[i][j][2] = LCSuff[i-1][j-1][2]
+                idx1, idx2 = LCSuff[i][j][1], LCSuff[i][j][2]
+                if (idx1,idx2) in matching_blocks_dict:
+                    matching_blocks_dict[(idx1,idx2)] += 1
+                else:
+                    matching_blocks_dict[(idx1,idx2)] = 1
+            else: 
+                LCSuff[i][j][0] = 0
+                LCSuff[i][j][1] = i
+                LCSuff[i][j][2] = j
+
+    matching_blocks_val = list(matching_blocks_dict)
+    matching_blocks = []
+    for i in matching_blocks_val:
+        idx1 = i[0]
+        idx2 = i[1]
+        length = matching_blocks_dict[i]
+        matching_blocks.append((idx1, idx2, length))
+    
+    return matching_blocks 
+
+# given two arrays, finds their LCS
+# note that the notion of 'common subsequence' is a bit different;
+# see the explanation in straighten_out()
+# Aria's Comment:
+def match_sequences(primary, secondary, noise_budget=NOISE_BUDGET):
+    print('Primary   : {}'.format(primary))
+    print('Secondary : {}'.format(secondary))
+    matching_blocks = LCSubStr(primary, secondary, noise_budget = 2*noise_budget)
+
+    # The following will give us the formast as follows:
+    # Each pair give us : ( start in first string, end in first string
+    #                       start in second string, end in second string)
+    # it is denoted by start1, stop1, start2, stop2
+    matching_blocks = [(i, i+n, j, j+n) for i, j, n in matching_blocks]
+    print('Matching blocks are : {}'.format(matching_blocks))
+
+    # The following two cases also need to be changed
+    longest_matching_block = (0,0,0,0)
+    for block in matching_blocks:
+        start1, stop1, start2, stop2 = block
+        
+        update = True
+        while stop1 <= len(primary) and stop2 <= len(secondary) and update:
+            update = False
+            for i in range(stop2, len(secondary)):
+                found_flag = False
+                for j in range(1, len(primary)-stop1+1): 
+                    if aprox_equal(sum(primary[stop1:stop1+j]), secondary[i], 2*noise_budget):
+                        stop1 += j
+                        stop2 += 1
+                        update = True
+                        found_flag = True
+                        break
+                if not found_flag:
+                    break
+            for i in range(stop1, len(primary)):
+                found_flag = False
+                for j in range(1, len(secondary)-stop2+1): 
+                    if aprox_equal(sum(secondary[stop2:stop2+j]), primary[i], 2*noise_budget):
+                        stop1 += 1
+                        stop2 += j
+                        update = True
+                        found_flag = True
+                        break
+                if not found_flag:
+                    break
+        
+        update = True
+        while start1 >= 0 and stop2 >= 0 and update:
+            update = False
+            for i in reversed(range(start2)):
+                found_flag = False
+                for j in range(1, start1+1):  
+                    if aprox_equal(sum(primary[start1-j:start1]), secondary[i], 2*noise_budget):
+                        start1 -= j
+                        start2 -= 1
+                        update = True
+                        found_flag = True
+                        break
+                if not found_flag:
+                    break
+
+            for i in reversed(range(start1)):
+                found_flag = False
+                for j in range(1, start2+1):  
+                    if aprox_equal(sum(secondary[start2-j:start2]), primary[i], 2*noise_budget):
+                        start1 -= 1
+                        start2 -= j
+                        update = True
+                        found_flag = True
+                        break
+                if not found_flag:
+                    break
+                        
+        if stop1-start1 > longest_matching_block[1]-longest_matching_block[0]:
+            print('update longest from {}'.format(block))
+            longest_matching_block = (start1, stop1, start2, stop2)
+
+    print('Longest blocks is : {}'.format(longest_matching_block))
+
+    return longest_matching_block
+
+# given two arrays, looks to find relations of the form arr1[i] == sum(arr2[j:j+k])
+# whenever found, arr1[i] will be replaced by the elements arr2[j:j+k].
+# note that the inputs to this function are always subsequences of cliques
+# next to their longest common subsequence.
+# for example [a, b, c, d, e+f, g, h]
+#          [k, a, b, c, d, e, f, g]
+# then, straighten_out will be called once with ([], [k]),
+# and once with ([e+f, g, h], [e, f, g])
+def straighten_out(arr1, arr2):
+    print('- straighten_out() for', arr1, arr2)
+    # base cases of recursion
+    if len(arr1) == 0:
+        return arr2
+    if len(arr2) == 0:
+        return arr1
+    val1 = arr1[0]
+    val2 = arr2[0]
+
+    if aprox_equal(val1, val2, NOISE_BUDGET):
+        result = [arr1[0]]
+        the_rest = straighten_out(arr1[1:], arr2[1:])
+        if not the_rest is None:
+            result.extend(straighten_out(arr1[1:], arr2[1:]))
+            return result
+        else:
+            return
+    # the case when arr1, arr2 = [a+b], [a]
+    if len(arr1) == 1 and len(arr2) == 1:
+        if arr1[0] < arr2[0] and arr2[0] - arr1[0] in volumes_noisy: 
+            return [arr1[0], arr2[0]-arr1[0]]
+        elif arr1[0] < arr2[0] and arr2[0] - arr1[0] not in volumes_noisy:
+            print(arr2[0] - arr1[0], ' not in volumes')
+        elif arr2[0] < arr1[0] and arr1[0] - arr2[0] in volumes_noisy:
+            return [arr2[0], arr1[0]-arr2[0]]
+        elif arr2[0] < arr1[0] and arr1[0] - arr2[0] not in volumes_noisy:
+            print(arr1[0] - arr2[0], ' not in volumes')
+    # general case
+    if len(arr2) > 1:
+        for i in range(2, len(arr2)+1):
+            val1 = arr1[0]
+            val2 = sum(arr2[:i])
+
+            if aprox_equal(val1, val2, NOISE_BUDGET):
+                slice1 = arr2[:i]
+                slice2 = straighten_out(arr1[1:], arr2[i:])
+                if not slice2 is None:
+                    slice1.extend(slice2)
+                    return slice1
+                else:
+                    return
+    if len(arr1) > 1:
+        for i in range(2, len(arr1)+1):
+            val1 = arr2[0]
+            val2 = sum(arr1[:i])
+
+            if aprox_equal(val1, val2, NOISE_BUDGET):
+                slice1 = arr1[:i]
+                slice2 = straighten_out(arr2[1:], arr1[i:])
+                if not slice2 is None:
+                    slice1.extend(slice2)
+                    return slice1
+                else:
+                    return
+    return
+
+# calls the straighten_out function on reverse of the given arrays
+def straighten_out_reverse(arr1, arr2):
+    arr1.reverse()
+    arr2.reverse()
+    result = straighten_out(arr1, arr2)
+    if result:
+        result.reverse()
+    return result
+
+
+def modify_lcs(lcs1, lcs2):
+    print('modify lcs: {}, {}'.format(lcs1, lcs2))
+
+    res = []
+    idx1, idx2 = 0, 0
+    while idx1 < len(lcs1) and idx2 < len(lcs2):
+        if aprox_equal(lcs1[idx1], lcs2[idx2], 2*NOISE_BUDGET):
+            res.append(lcs1[idx1])
+            idx1 += 1
+            idx2 += 1
+            
+        else:
+            i = idx1 + 1
+            while i <= len(lcs1):
+                if aprox_equal(sum(lcs1[idx1:i]), lcs2[idx2], 2*NOISE_BUDGET):
+                    res = res + lcs1[idx1:i]
+                    idx1 = i
+                    idx2 += 1
+                    break
+                i += 1
+            j = idx2 + 1
+            while j <= len(lcs2):
+                if aprox_equal(lcs1[idx1], sum(lcs2[idx2:j]), 2*NOISE_BUDGET):
+                    res = res + lcs2[idx2:j]
+                    idx1 += 1
+                    idx2 = j
+                    break
+                j += 1
+
+    return res
+
+
+# given two parts of the solution (2 cliques) and their matching (LCS coordinates),
+# merge them if it is possible (as dictated by the conditions in straighten_out())
+# if not possible, return None
+def attempt_merge(base_sol, sol, match):
+    print('~ attempt_merge() with', base_sol, sol, match)
+    start1, stop1, start2, stop2 = match
+
+    lcs1 = base_sol[start1:stop1]
+    lcs2 = sol[start2:stop2]
+    
+    lcs = modify_lcs(lcs1, lcs2)
+    print(lcs, start1, stop1, start2, stop2)
+
+    slice1 = straighten_out_reverse(base_sol[:start1], sol[:start2])
+    print('--- slice 1', slice1)
+    slice2 = lcs
+    slice3 = straighten_out(base_sol[stop1:], sol[stop2:])
+    print('--- slice 3', slice3)
+
+    if slice1 is None or slice3 is None:
+        return
+    else:
+        base_sol = slice1
+        base_sol.extend(slice2)
+        base_sol.extend(slice3)
+        return base_sol
+
+# given two parts of the solution (2 cliques) and their matching (LCS coordinates)
+# merge them in whatever orientation is better (direct or reverse) and return the result.
+def merge(base_sol, sol):
+    print('= merge() for solution', base_sol, sol)
+    direct_match, reverse_match = find_lcs(base_sol, sol)
+    print('direct match and reverse match are as follows')
+    print(direct_match, reverse_match)
+    print('* merge {}, {}'.format(base_sol, sol))
+
+    # check if (any) match is of legitimate size
+    if (direct_match[1] - direct_match[0] > INTERSECTION_THRESHOLD or reverse_match[1] - reverse_match[0] > INTERSECTION_THRESHOLD):
+        # check which way it makes more sense to merge
+        if direct_match[1] - direct_match[0] > reverse_match[1] - reverse_match[0]:
+            print('direct wins')
+            res = attempt_merge(base_sol, sol, direct_match)
+            if res is None:
+                print('+ merge cancelled')
+            else:
+                base_sol = res
+                print('+ b:', base_sol)
+        elif direct_match[1] - direct_match[0] < reverse_match[1] - reverse_match[0]:
+            print('reverse wins')
+            sol.reverse()
+            res = attempt_merge(base_sol, sol, reverse_match)
+            if res is None:
+                print('+ merge cancelled')
+            else:
+                base_sol = res
+                print('+ b:', base_sol)
+        else: #  direct_match[1] - direct_match[0] == reverse_match[1] - reverse_match[0]:
+            # if there is a tie, check both matches to see if a merge is possible.
+            res = attempt_merge(base_sol, sol, direct_match)
+            if res is None:
+                sol.reverse()
+                res = attempt_merge(base_sol, sol, reverse_match)
+                if res is None:
+                    print('+ merge cancelled')
+                else:
+                    base_sol = res
+                    print('+ b:', base_sol)
+
+        return base_sol
+    else:
+        print ('No long common sublist found')
+        return base_sol
+
+# Add volume to the graph, as a node and as (possibly) edges
+def add_volume(G, vol):
+    if vol > 0 and vol not in volumes_noisy:
+        print('- adding volume:', vol)
+        # add the node
+        G.add_node(vol)
+        volumes.append(vol)
+        # add edges to the new node
+        for n in G.nodes:
+            if n != vol and not G.has_edge(n, vol):
+                if abs(n - vol) in volumes_noisy:
+                    G.add_edge(n, vol)
+
+        # add edges corresponding to the new volume
+        for e in nx.non_edges(G):
+            if aprox_equal(abs(e[1] - e[0]), vol, NOISE_BUDGET):
+                G.add_edge(e[1], e[0])
+
+        # Add the noisy values:
+        window_down = int( vol * (1 - (0.1* NOISE_BUDGET)))
+        window_up = int( vol * (1 + (0.9*NOISE_BUDGET)))
+        for j in range(window_down, window_up):
+            volumes_noisy.append(j)
+
+    return G
+
+
+def explain(mode, H):
+    print('-- 3: run parallel merges --')
+    
+    all_cliques = list(nx.enumerate_all_cliques(H))[::-1]
+    k = len(all_cliques[0])
+    print('Graph clique number before explaining:', k)
+
+    base_solutions = []
+    for cliq in all_cliques:
+        if len(cliq) == k:
+            base_solutions.append(get_unary_ranges(cliq))
+        else: 
+            break
+
+    if k >= N:
+        print('no need to explain, abort.')
+        return H, base_solutions[0], []
+
+    print('cliq number:', k, '\nnumber of such cliques:', len(base_solutions))
+    for b in base_solutions:
+        print(b)
+    
+    # Just returned the Clique and not continue with Match & Extend
+    if mode == 'clique':
+        return H, base_solutions[0], []
+
+    global INTERSECTION_THRESHOLD
+    INTERSECTION_THRESHOLD = min(INTERSECTION_THRESHOLD, k-2)
+
+    # running Explain starting with the first biggest clique
+    base_sol = base_solutions[0]
+    print('######## Starting with base solution:', base_sol, '########')
+    steps_data = []
+    step = 0
+
+    # until a solution of length N  is reached, find a clique that is
+    # compatible enough with the base solution, and merge them
+    # add the new resulting volumes and rerun the clique finding (b)
+    while True:
+        # we store the clique number k and the number of cliques of size k at each step of the algorithm
+        cliques_info = {}
+        for j in [k, k-1, k-2, k-3, k-4]:
+            cliques_info[j] = len([c for c in all_cliques if len(c) == j])
+        steps_data.append((len(base_sol), cliques_info))
+
+        found = False
+        print('. Step {} begin. clique number:'.format(step), k)
+
+        global LEGITIMATE_CLIQUE_SIZE
+        LEGITIMATE_CLIQUE_SIZE = k-5
+        
+        cliques = [cliq for cliq in all_cliques if len(cliq) > LEGITIMATE_CLIQUE_SIZE]
+
+        if k >= N:
+            base_sol = get_unary_ranges(cliques[0])
+            print('## done ##')
+            break
+
+        # compute n_new_vols for each clique
+        least_disruptive_cliques = {}
+        for cliq in cliques:
+            sol = get_unary_ranges(cliq)
+            temp = merge(base_sol, sol)
+
+            # if base_sol is not a subsolution of temp
+            # and if all the resulting volumes are within allowed bounds
+            # (dictated by VOLUME_UPPER_BOUND)
+            if len(temp) > len(base_sol):
+                if all([range <= VOLUME_UPPER_BOUND for range in range_computer(temp)]):
+                    n_new_vols = 0
+                    for r in range_computer(temp):
+                        if r > 0 and r not in volumes_noisy:
+                            n_new_vols += 1
+                    if n_new_vols in least_disruptive_cliques:
+                        least_disruptive_cliques[n_new_vols].append(cliq)
+                    else:
+                        least_disruptive_cliques[n_new_vols] = [cliq]
+
+        if len(least_disruptive_cliques) == 0:
+            break
+        d = sorted(least_disruptive_cliques.keys())[0]
+        # if d == 0:
+        #     d = sorted(least_disruptive_cliques.keys())[1]
+        if d <= NEW_VOLS_LIMIT:
+            cliq = least_disruptive_cliques[d][0]
+            sol = get_unary_ranges(cliq)
+            temp = merge(base_sol, sol)
+
+            # find the volumes that the resulting solution will produce and add them to the volumes list
+            # and add the corresponding nodes and edges to the graph.
+            found = True
+            print('+ b:', temp)
+            for r in range_computer(temp):
+                H = add_volume(H, r)
+            base_sol = temp
+            #all_cliques = list(nx.enumerate_all_cliques(H))[::-1]
+            #k = len(all_cliques[0])
+
+        print('. Step {} end. clique number:'.format(step), k)
+        step += 1
+
+        # if we could not add more nodes in this run, or if clique of size N is found
+        if not found: 
+            break
+        
+        if len(base_sol) >= N:
+            cliques_info = {}
+            for j in [k, k-1, k-2, k-3, k-4]:
+                cliques_info[j] = len([c for c in all_cliques if len(c) == j])
+            steps_data.append((len(base_sol), cliques_info))
+            break
+
+    print('Graph clique number after explaining:', k)
+
+    return H, base_sol, steps_data
+
+
+# run the algorithm on all experiments and print out a report
+def general_test(mode, noise_budget_val, drop_num_val, seed_val):
+    
+    experiments1 = ['nis2008_1', 'nis2008_2', 'nis2008_3', 'nis2008_4', 'nis2008_5',
+                    'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
+
+    experiments2 = ['nis2008_1_non_uniform_q', 'nis2008_2_non_uniform_q', 'nis2008_3_non_uniform_q', 'nis2008_4_non_uniform_q', 'nis2008_5_non_uniform_q', 
+                    'nis2008_6_non_uniform_q', 'nis2008_7_non_uniform_q', 'nis2008_8_non_uniform_q', 'nis2008_9_non_uniform_q', 'nis2008_10_non_uniform_q']
+
+    experiments3 = ['nis2008_1_gauss' , 'nis2008_2_gauss', 'nis2008_3_gauss', 'nis2008_4_gauss', 'nis2008_5_gauss', 
+                    'nis2008_6_gauss', 'nis2008_7_gauss', 'nis2008_8_gauss', 'nis2008_9_gauss', 'nis2008_10_gauss']
+
+    experiments = experiments1 + experiments2 + experiments3
+
+    drop_num = drop_num_val 
+
+    global NOISE_BUDGET
+    NOISE_BUDGET = noise_budget_val
+
+    dbs = []
+    guesses = []
+    successes = []
+    graphs_final = []
+    runtimes = []
+    dropped_vols = []
+    execution_data = {}
+
+    for ex_name in experiments:
+        #print(f'============ Experiment {ex_name} ============')
+        global db
+        db = eval('db_'+ ex_name)
+        vols = eval(ex_name + '_vols')
+
+        # Experiments for dropping some random volumes
+        random.seed(seed_val)
+        true_range_vols = range_computer(db)
+        drop_candidates = [v for v in true_range_vols if v > max(true_range_vols)/4]
+        random.shuffle(drop_candidates)
+        dropped = []
+        for i in range(drop_num):
+            true_vol_dropped = drop_candidates.pop()
+            vols.sort(key=lambda x: abs(x-true_vol_dropped))
+            drp = vols[0]
+            vols.remove(drp)
+            dropped.append(drp)
+        vols.sort()
+        dropped_vols.append(dropped)
+
+        global N
+        N = len(db)
+
+        start = time.time()
+
+        global volumes_noisy
+        H, volumes_noisy = create_graph_noisy(vols, NOISE_BUDGET)
+
+        # 3. run parallel merges
+        H, base_sol, exec_data = explain(mode, H)
+
+        execution_data[ex_name] = exec_data
+
+        graphs_final.append(H)
+        dbs.append(db)
+        guesses.append(base_sol)
+
+        end = time.time()
+        runtimes.append(end-start)
+
+    # print the report
+    f_name = "report_{}.txt".format(drop_num)
+    f = open(f_name, "a+")
+
+    template = "{0:25}{1:80}{2:10}" # column widths: 8, 80, 10
+    f.write('-------- Report --------\n')
+    f.write(template.format("Exp Name", "db", "description\n"))# header
+    for i, ex_name in enumerate(experiments):
+        d, g = np.array(dbs[i]), np.array(guesses[i])
+        if len(g) == N:
+            if np.linalg.norm(g-d) > np.linalg.norm(np.flip(g)-d):
+                g = np.flip(g)
+            v_diff = list(g-d)
+            diff_norm = np.linalg.norm(np.array(v_diff)/np.array(d))
+            f.write(template.format(ex_name, str(dbs[i]), 'real db\n'))
+            f.write(template.format('', str(list(g)), 'guess\n'))
+            f.write(template.format('', str(v_diff), 'diff\n'))
+            f.write(template.format('', str(diff_norm), 'diff_norm\n'))
+            f.write(template.format('', str(runtimes[i]), 'runtime\n'))
+        else:
+            f.write(template.format(ex_name, str(dbs[i]), 'real db\n'))
+            f.write(template.format('', str(list(g)), 'guess\n'))
+            f.write(template.format('', str(runtimes[i]), 'runtime\n'))
+        
+    f.close()
+
+    return
+
+def main():
+    args = sys.argv[1:]
+    if len(args) == 4:
+        mode = str(sys.argv[1])
+        noise_budget_val = float(sys.argv[2])
+        drop_num_val = int(sys.argv[3])
+        seed_val = int(sys.argv[4])
+        general_test(mode, noise_budget_val, drop_num_val, seed_val)
+    
+    return
+
+if __name__ == "__main__":
+    main()
