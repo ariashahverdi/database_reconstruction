@@ -44,7 +44,7 @@ def aprox_equal(val1, val2, noise_budget=0.0):
         return True
     return False
 
-# Returns length of longest common substring of X[0..m-1] and Y[0..n-1]  
+# Returns length of the approximate longest common substring of X[0..m-1] and Y[0..n-1]  
 def aprox_LCSubStr(X, Y, noise_budget=0.0): 
     m = len(X)
     n = len(Y)
@@ -82,8 +82,8 @@ def aprox_LCSubStr(X, Y, noise_budget=0.0):
     
     return matching_blocks 
 
-# given two arrays, finds their LCS note that the notion of 'common subsequence'
-# is a bit different
+# given two arrays, finds their extended LCSubstring
+# note that the notion of 'common subsequence' sis a bit different
 def match_sequences(primary, secondary, noise_budget=NOISE_BUDGET):
     print('Primary   : {}'.format(primary))
     print('Secondary : {}'.format(secondary))
@@ -161,8 +161,10 @@ def match_sequences(primary, secondary, noise_budget=NOISE_BUDGET):
 
     return longest_matching_block
 
-# Find the longest common subsequence of two lists
+# Find the longest common substring of two lists
 # returns their match both aligned similarly, and reversely
+# this is to find out if the two given lists (database candidates) 
+# match as they are, or are approximate mirrors of each other
 def find_lcs(primary, secondary):
     r_secondary = secondary[:]
     r_secondary.reverse()
@@ -173,8 +175,8 @@ def find_lcs(primary, secondary):
 
 # given two arrays, looks to find relations of the form arr1[i] == sum(arr2[j:j+k])
 # whenever found, arr1[i] will be replaced by the elements arr2[j:j+k].
-# note that the inputs to this function are always subsequences of cliques
-# next to their longest common subsequence.
+# note that the inputs to this function are always substrings of cliques
+# next to their longest common substring.
 # for example [a, b, c, d, e+f, g, h]
 #          [k, a, b, c, d, e, f, g]
 # then, straighten_out will be called once with ([], [k]),
@@ -237,6 +239,7 @@ def straighten_out(arr1, arr2):
     return
 
 # calls the straighten_out function on reverse of the given arrays
+# this is needed to "straighen out" the substring to the left of the LCSubstring
 def straighten_out_reverse(arr1, arr2):
     arr1.reverse()
     arr2.reverse()
@@ -387,7 +390,7 @@ def match_extend(mode, H):
     
     # Get the list of all the cliques in the graph
     # The order returned by enumerate_all_cliques is from the smallest clique to 
-    # largest one, we reverse the order
+    # largest one, so we reverse the order
     all_cliques = list(nx.enumerate_all_cliques(H))[::-1]
     k = len(all_cliques[0])
     print('Graph clique number before running Match & Extend:', k)
@@ -418,9 +421,6 @@ def match_extend(mode, H):
     if mode == 'clique':
         return H, base_solutions[0], []
 
-    global INTERSECTION_THRESHOLD
-    INTERSECTION_THRESHOLD = min(INTERSECTION_THRESHOLD, k-2)
-
     # Running Match & Extend starting with the first biggest clique
     base_sol = base_solutions[0]
     print('######## Starting with base solution:', base_sol, '########')
@@ -441,6 +441,8 @@ def match_extend(mode, H):
         found = False
         print('. Step {} begin. clique number:'.format(step), k)
 
+        # if the maximal clique size gets larger, we also increase the minimal 
+        # clique size to be considered accurate
         global LEGITIMATE_CLIQUE_SIZE
         LEGITIMATE_CLIQUE_SIZE = k-5
         
@@ -451,7 +453,8 @@ def match_extend(mode, H):
             print('## done ##')
             break
 
-        # Compute n_new_vols for each clique
+        # In the following preprocessing step, we iterate over all cliques to find 
+        # the ones that would cause the least amount of new volumes added to our graph
         least_disruptive_cliques = {}
         for cliq in cliques:
             # Check the result of Merge for all the cliques of legitimate size
@@ -479,7 +482,7 @@ def match_extend(mode, H):
         d = sorted(least_disruptive_cliques.keys())[0]
 
         if d <= NEW_VOLS_LIMIT:
-            # Get the clique which adds less amount of volumes to the graph
+            # Get the clique which adds the least amount of volumes to the graph
             cliq = least_disruptive_cliques[d][0]
             cand_sol = get_unary_ranges(cliq)
             temp = merge(base_sol, cand_sol)

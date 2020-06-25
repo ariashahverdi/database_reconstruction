@@ -1,10 +1,11 @@
 import networkx as nx
 
-# Given an array of size n, computes the volumes of all the ranges
-# output sizeL n(n-1)/2 + n
+# Given an array of size n (considered as the volumes 
+# of ranges of size one, in the correct order),
+# computes the volumes of all the ranges
+# output size: n(n+1)/2
 def range_computer(arr, with_noise = False):
     n = len(arr)
-    # print('input length:', n)
 
     output = []
     sum = 0
@@ -22,7 +23,6 @@ def range_computer(arr, with_noise = False):
                 output.append(sum+1)
     output.sort()
 
-    # print('ouput length:', len(output))
     return output
 
 
@@ -30,7 +30,7 @@ def create_graph(vols):
     G = nx.Graph()
     G.add_nodes_from(vols)
     vols.sort()
-    #print(vols)
+
     for i in vols:
         temp_vols = vols[:]
         temp_vols.remove(i)
@@ -38,7 +38,7 @@ def create_graph(vols):
             temp_vols2 = temp_vols[:]
             temp_vols2.remove(j)
             if abs(j-i) in temp_vols2:
-                G.add_edge(i, j, weight=4.7)
+                G.add_edge(i, j)
     return G
 
 
@@ -67,7 +67,7 @@ def create_graph_noisy(vols, noise_budget=0):
     return G, guess
 
 
-# given an array (usually of primitive ranges [1-1], [1-2], [1-3]...) return 
+# given an array (e.g. of primitive ranges [1-1], [1-2], [1-3]...) return 
 # the differences between pairs of neighbours and as as result of that the 
 # returned list is in the form of [1-1], [2-2], [3,3], ... 
 def get_unary_ranges(arr):
@@ -79,7 +79,7 @@ def get_unary_ranges(arr):
 
 
 # The first returned result is the volumes in the sorted way and the second
-# returned result in the actual database
+# returned result is the actual database
 def nodes_to_vols(nodes, volumes=[]):
     vols = nodes
     vols = sorted(vols)
