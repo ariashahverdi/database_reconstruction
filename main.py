@@ -1,31 +1,25 @@
-from helper import *
-from difflib import SequenceMatcher
+
 import networkx as nx
 import numpy as np
 import random
-# from clique_iterative_solver import *
-# from clique_solve_trial import *
 import sys
 import csv
-#sys.path.insert(1, '../code')
-#from improved_measurements import *
-from dbs_and_measurements import *
 import pdb
 import time
 
-#from sage.all import *
-#from sage.modules.free_module_integer import IntegerLattice
-#from fpylll import *
+from helper import *
+from dbs_and_measurements import *
 
-# number of volumes that must be common to two solutions in order to regard them 'parallel'
+
+# number of volumes that must be common to two solutions in order to 
+# regard them a 'Match'
 INTERSECTION_THRESHOLD = 3
+
 # only cliques of legitimate size are 'expanded', i.e. if a node
 # outside of the clique is highly connected to the clique,
 # the node will be added to the clique
 LEGITIMATE_CLIQUE_SIZE = 8 # subject to change during the execution
-# if a node is connected to all but (EXPANSION_TOLERANCE) number
-# of nodes in some clique, connect it with the rest
-EXPANSION_TOLERANCE = 1
+
 
 VOLUME_LOWER_BOUND = 5
 VOLUME_UPPER_BOUND = 100000
@@ -44,38 +38,26 @@ volumes = []
 volumes_noisy = []
 
 
-# find the longest common subsequence of two lists
-# returns their match both aligned similarly, and reversely
-def find_lcs(primary, secondary):
-    r_secondary = secondary[:]
-    r_secondary.reverse()
-    match1 = match_sequences(primary, secondary, NOISE_BUDGET)
-    match2 = match_sequences(primary, r_secondary, NOISE_BUDGET)
-    return (match1, match2)
-
 # Find if two values are approximitely equal
 def aprox_equal(val1, val2, noise_budget=0.0):
     if abs(val1-val2) <= min(val1,val2) * noise_budget:
         return True
     return False
 
-# Returns length of longest common  
-# substring of X[0..m-1] and Y[0..n-1]  
-def LCSubStr(X, Y, noise_budget=0.0): 
+# Returns length of longest common substring of X[0..m-1] and Y[0..n-1]  
+def aprox_LCSubStr(X, Y, noise_budget=0.0): 
     m = len(X)
     n = len(Y)
     LCSuff = [[[0,0,0] for k in range(n+1)] for l in range(m+1)] 
     matching_blocks_dict = {}
             
-    # Following steps to build 
-    # LCSuff[m+1][n+1] in bottom up fashion 
+    # Following steps to build LCSuff[m+1][n+1] in bottom up fashion 
     for i in range(m + 1): 
         for j in range(n + 1): 
             if (i == 0 or j == 0): 
                 LCSuff[i][j][0] = 0
                 LCSuff[i][j][1] = i
                 LCSuff[i][j][2] = j
-            #elif (X[i-1] == Y[j-1]):
             elif(aprox_equal(X[i-1], Y[j-1], noise_budget)):
                 LCSuff[i][j][0] = LCSuff[i-1][j-1][0] + 1
                 LCSuff[i][j][1] = LCSuff[i-1][j-1][1]
@@ -100,14 +82,12 @@ def LCSubStr(X, Y, noise_budget=0.0):
     
     return matching_blocks 
 
-# given two arrays, finds their LCS
-# note that the notion of 'common subsequence' is a bit different;
-# see the explanation in straighten_out()
-# Aria's Comment:
+# given two arrays, finds their LCS note that the notion of 'common subsequence'
+# is a bit different
 def match_sequences(primary, secondary, noise_budget=NOISE_BUDGET):
     print('Primary   : {}'.format(primary))
     print('Secondary : {}'.format(secondary))
-    matching_blocks = LCSubStr(primary, secondary, noise_budget = 2*noise_budget)
+    matching_blocks = aprox_LCSubStr(primary, secondary, noise_budget = 2*noise_budget)
 
     # The following will give us the formast as follows:
     # Each pair give us : ( start in first string, end in first string
@@ -116,7 +96,6 @@ def match_sequences(primary, secondary, noise_budget=NOISE_BUDGET):
     matching_blocks = [(i, i+n, j, j+n) for i, j, n in matching_blocks]
     print('Matching blocks are : {}'.format(matching_blocks))
 
-    # The following two cases also need to be changed
     longest_matching_block = (0,0,0,0)
     for block in matching_blocks:
         start1, stop1, start2, stop2 = block
@@ -181,6 +160,16 @@ def match_sequences(primary, secondary, noise_budget=NOISE_BUDGET):
     print('Longest blocks is : {}'.format(longest_matching_block))
 
     return longest_matching_block
+
+# Find the longest common subsequence of two lists
+# returns their match both aligned similarly, and reversely
+def find_lcs(primary, secondary):
+    r_secondary = secondary[:]
+    r_secondary.reverse()
+    match1 = match_sequences(primary, secondary, NOISE_BUDGET)
+    match2 = match_sequences(primary, r_secondary, NOISE_BUDGET)
+    return (match1, match2)
+
 
 # given two arrays, looks to find relations of the form arr1[i] == sum(arr2[j:j+k])
 # whenever found, arr1[i] will be replaced by the elements arr2[j:j+k].
@@ -256,7 +245,9 @@ def straighten_out_reverse(arr1, arr2):
         result.reverse()
     return result
 
-
+# Modify the LCS such that the LCS always have more volumes, meaning that if
+# there exists a volume which can be broken down to smaller volumes using the 
+# information in lcs2 we do that
 def modify_lcs(lcs1, lcs2):
     print('modify lcs: {}, {}'.format(lcs1, lcs2))
 
@@ -292,20 +283,21 @@ def modify_lcs(lcs1, lcs2):
 # given two parts of the solution (2 cliques) and their matching (LCS coordinates),
 # merge them if it is possible (as dictated by the conditions in straighten_out())
 # if not possible, return None
-def attempt_merge(base_sol, sol, match):
-    print('~ attempt_merge() with', base_sol, sol, match)
+def attempt_merge(base_sol, cand_sol, match):
+    print('~ attempt_merge() with', base_sol, cand_sol, match)
     start1, stop1, start2, stop2 = match
 
     lcs1 = base_sol[start1:stop1]
-    lcs2 = sol[start2:stop2]
+    lcs2 = cand_sol[start2:stop2]
     
+    # Make sure the LCS has all the elementary volumes
     lcs = modify_lcs(lcs1, lcs2)
     print(lcs, start1, stop1, start2, stop2)
 
-    slice1 = straighten_out_reverse(base_sol[:start1], sol[:start2])
+    slice1 = straighten_out_reverse(base_sol[:start1], cand_sol[:start2])
     print('--- slice 1', slice1)
     slice2 = lcs
-    slice3 = straighten_out(base_sol[stop1:], sol[stop2:])
+    slice3 = straighten_out(base_sol[stop1:], cand_sol[stop2:])
     print('--- slice 3', slice3)
 
     if slice1 is None or slice3 is None:
@@ -316,21 +308,22 @@ def attempt_merge(base_sol, sol, match):
         base_sol.extend(slice3)
         return base_sol
 
-# given two parts of the solution (2 cliques) and their matching (LCS coordinates)
-# merge them in whatever orientation is better (direct or reverse) and return the result.
-def merge(base_sol, sol):
-    print('= merge() for solution', base_sol, sol)
-    direct_match, reverse_match = find_lcs(base_sol, sol)
+# Given two parts of the solution (2 cliques) and their matching 
+# (LCS coordinates) merge them in whatever orientation is better 
+# (direct or reverse) and return the result.
+def merge(base_sol, cand_sol):
+    print('= merge() for solution', base_sol, cand_sol)
+    direct_match, reverse_match = find_lcs(base_sol, cand_sol)
     print('direct match and reverse match are as follows')
     print(direct_match, reverse_match)
-    print('* merge {}, {}'.format(base_sol, sol))
+    print('* merge {}, {}'.format(base_sol, cand_sol))
 
     # check if (any) match is of legitimate size
     if (direct_match[1] - direct_match[0] > INTERSECTION_THRESHOLD or reverse_match[1] - reverse_match[0] > INTERSECTION_THRESHOLD):
         # check which way it makes more sense to merge
         if direct_match[1] - direct_match[0] > reverse_match[1] - reverse_match[0]:
             print('direct wins')
-            res = attempt_merge(base_sol, sol, direct_match)
+            res = attempt_merge(base_sol, cand_sol, direct_match)
             if res is None:
                 print('+ merge cancelled')
             else:
@@ -338,8 +331,8 @@ def merge(base_sol, sol):
                 print('+ b:', base_sol)
         elif direct_match[1] - direct_match[0] < reverse_match[1] - reverse_match[0]:
             print('reverse wins')
-            sol.reverse()
-            res = attempt_merge(base_sol, sol, reverse_match)
+            cand_sol.reverse()
+            res = attempt_merge(base_sol, cand_sol, reverse_match)
             if res is None:
                 print('+ merge cancelled')
             else:
@@ -347,10 +340,10 @@ def merge(base_sol, sol):
                 print('+ b:', base_sol)
         else: #  direct_match[1] - direct_match[0] == reverse_match[1] - reverse_match[0]:
             # if there is a tie, check both matches to see if a merge is possible.
-            res = attempt_merge(base_sol, sol, direct_match)
+            res = attempt_merge(base_sol, cand_sol, direct_match)
             if res is None:
-                sol.reverse()
-                res = attempt_merge(base_sol, sol, reverse_match)
+                cand_sol.reverse()
+                res = attempt_merge(base_sol, cand_sol, reverse_match)
                 if res is None:
                     print('+ merge cancelled')
                 else:
@@ -375,7 +368,7 @@ def add_volume(G, vol):
                 if abs(n - vol) in volumes_noisy:
                     G.add_edge(n, vol)
 
-        # add edges corresponding to the new volume
+        # Add edges corresponding to the new volume
         for e in nx.non_edges(G):
             if aprox_equal(abs(e[1] - e[0]), vol, NOISE_BUDGET):
                 G.add_edge(e[1], e[0])
@@ -389,46 +382,57 @@ def add_volume(G, vol):
     return G
 
 
-def explain(mode, H):
-    print('-- 3: run parallel merges --')
+def match_extend(mode, H):
+    print('-- Run Match & Extend --')
     
+    # Get the list of all the cliques in the graph
+    # The order returned by enumerate_all_cliques is from the smallest clique to 
+    # largest one, we reverse the order
     all_cliques = list(nx.enumerate_all_cliques(H))[::-1]
     k = len(all_cliques[0])
-    print('Graph clique number before explaining:', k)
+    print('Graph clique number before running Match & Extend:', k)
 
     base_solutions = []
     for cliq in all_cliques:
         if len(cliq) == k:
+            # Construct the database from the cliques that have maximal size
+            #  and save them as the initial base_solutions
             base_solutions.append(get_unary_ranges(cliq))
         else: 
             break
 
-    if k >= N:
-        print('no need to explain, abort.')
+    # If the size of the Clique is equal to N we found the maximum clique and we
+    # are done
+    if k == N:
+        print('no need to run Match & Extend, abort.')
         return H, base_solutions[0], []
 
+    # Print all the possible base_solutions
     print('cliq number:', k, '\nnumber of such cliques:', len(base_solutions))
     for b in base_solutions:
         print(b)
     
-    # Just returned the Clique and not continue with Match & Extend
+    # If we want to see the performance of only the noisy clique finding,
+    # just return the first result in base_solutions and don't continue with 
+    # Match & Extend
     if mode == 'clique':
         return H, base_solutions[0], []
 
     global INTERSECTION_THRESHOLD
     INTERSECTION_THRESHOLD = min(INTERSECTION_THRESHOLD, k-2)
 
-    # running Explain starting with the first biggest clique
+    # Running Match & Extend starting with the first biggest clique
     base_sol = base_solutions[0]
     print('######## Starting with base solution:', base_sol, '########')
     steps_data = []
     step = 0
 
-    # until a solution of length N  is reached, find a clique that is
+    # Until a solution of length N is reached, find a clique that is
     # compatible enough with the base solution, and merge them
-    # add the new resulting volumes and rerun the clique finding (b)
+    # add the new resulting volumes
     while True:
-        # we store the clique number k and the number of cliques of size k at each step of the algorithm
+        # We store the clique number k and the number of cliques of size k at 
+        # each step of the algorithm
         cliques_info = {}
         for j in [k, k-1, k-2, k-3, k-4]:
             cliques_info[j] = len([c for c in all_cliques if len(c) == j])
@@ -447,11 +451,12 @@ def explain(mode, H):
             print('## done ##')
             break
 
-        # compute n_new_vols for each clique
+        # Compute n_new_vols for each clique
         least_disruptive_cliques = {}
         for cliq in cliques:
-            sol = get_unary_ranges(cliq)
-            temp = merge(base_sol, sol)
+            # Check the result of Merge for all the cliques of legitimate size
+            cand_sol = get_unary_ranges(cliq)
+            temp = merge(base_sol, cand_sol)
 
             # if base_sol is not a subsolution of temp
             # and if all the resulting volumes are within allowed bounds
@@ -459,6 +464,8 @@ def explain(mode, H):
             if len(temp) > len(base_sol):
                 if all([range <= VOLUME_UPPER_BOUND for range in range_computer(temp)]):
                     n_new_vols = 0
+                    # Check howw many new volumes the cand_sol will add and save
+                    # that into a dictionary
                     for r in range_computer(temp):
                         if r > 0 and r not in volumes_noisy:
                             n_new_vols += 1
@@ -470,22 +477,21 @@ def explain(mode, H):
         if len(least_disruptive_cliques) == 0:
             break
         d = sorted(least_disruptive_cliques.keys())[0]
-        # if d == 0:
-        #     d = sorted(least_disruptive_cliques.keys())[1]
-        if d <= NEW_VOLS_LIMIT:
-            cliq = least_disruptive_cliques[d][0]
-            sol = get_unary_ranges(cliq)
-            temp = merge(base_sol, sol)
 
-            # find the volumes that the resulting solution will produce and add them to the volumes list
-            # and add the corresponding nodes and edges to the graph.
+        if d <= NEW_VOLS_LIMIT:
+            # Get the clique which adds less amount of volumes to the graph
+            cliq = least_disruptive_cliques[d][0]
+            cand_sol = get_unary_ranges(cliq)
+            temp = merge(base_sol, cand_sol)
+
+            # find the volumes that the resulting solution will produce and add 
+            # them to the volumes list and add the corresponding nodes and edges 
+            # to the graph.
             found = True
             print('+ b:', temp)
             for r in range_computer(temp):
                 H = add_volume(H, r)
             base_sol = temp
-            #all_cliques = list(nx.enumerate_all_cliques(H))[::-1]
-            #k = len(all_cliques[0])
 
         print('. Step {} end. clique number:'.format(step), k)
         step += 1
@@ -494,6 +500,7 @@ def explain(mode, H):
         if not found: 
             break
         
+        # We found the correct number of elements for our database, we are done
         if len(base_sol) >= N:
             cliques_info = {}
             for j in [k, k-1, k-2, k-3, k-4]:
@@ -501,7 +508,7 @@ def explain(mode, H):
             steps_data.append((len(base_sol), cliques_info))
             break
 
-    print('Graph clique number after explaining:', k)
+    print('Graph clique number after Match & Extend:', k)
 
     return H, base_sol, steps_data
 
@@ -520,28 +527,29 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
 
     experiments = experiments1 + experiments2 + experiments3
 
-    drop_num = drop_num_val 
-
     global NOISE_BUDGET
     NOISE_BUDGET = noise_budget_val
 
     dbs = []
     guesses = []
-    successes = []
     graphs_final = []
     runtimes = []
     dropped_vols = []
     execution_data = {}
 
     for ex_name in experiments:
-        #print(f'============ Experiment {ex_name} ============')
+        # Get the original database and volumes from running cache attack
         global db
         db = eval('db_'+ ex_name)
         vols = eval(ex_name + '_vols')
 
         # Experiments for dropping some random volumes
+        # If drop_num_val is set to 0 this part has no effect
+        drop_num = drop_num_val 
         random.seed(seed_val)
         true_range_vols = range_computer(db)
+        # We just drop values greater than maximum /4 so not to drop elementary
+        # volumes
         drop_candidates = [v for v in true_range_vols if v > max(true_range_vols)/4]
         random.shuffle(drop_candidates)
         dropped = []
@@ -554,16 +562,20 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
         vols.sort()
         dropped_vols.append(dropped)
 
+        # In our Experiments N = 12
         global N
         N = len(db)
 
         start = time.time()
 
+        # Create the noisy graph and the noisy volumes
+        # Noisy volumes = volumes obtained from cache measurement + the window 
+        # around them
         global volumes_noisy
         H, volumes_noisy = create_graph_noisy(vols, NOISE_BUDGET)
 
-        # 3. run parallel merges
-        H, base_sol, exec_data = explain(mode, H)
+        # Run the Match & Extend Algorithm
+        H, base_sol, exec_data = match_extend(mode, H)
 
         execution_data[ex_name] = exec_data
 
@@ -574,7 +586,7 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
         end = time.time()
         runtimes.append(end-start)
 
-    # print the report
+    # Print the report
     f_name = "report_{}.txt".format(drop_num)
     f = open(f_name, "a+")
 
@@ -605,10 +617,10 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
 def main():
     args = sys.argv[1:]
     if len(args) == 4:
-        mode = str(sys.argv[1])
-        noise_budget_val = float(sys.argv[2])
-        drop_num_val = int(sys.argv[3])
-        seed_val = int(sys.argv[4])
+        mode = str(sys.argv[1]) # If you just want to run clique set it to 'clique'
+        noise_budget_val = float(sys.argv[2]) # Value for the noise budget
+        drop_num_val = int(sys.argv[3]) # Set to number of volumes to be dropped randomly
+        seed_val = int(sys.argv[4]) # Set the seed for randomly dropping volumes
         general_test(mode, noise_budget_val, drop_num_val, seed_val)
     
     return

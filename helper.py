@@ -42,6 +42,11 @@ def create_graph(vols):
     return G
 
 
+# Given the volumes and noise budget first create a assymetric window around 
+# each volume and call it guess. Guess is all the initial volumes + the 
+# assymetric around it. Then using the guess add an edge from i to j if their 
+# difference belongs to guess. Return the noisy graph constructed and the noisy
+# volumes
 def create_graph_noisy(vols, noise_budget=0):
     G = nx.Graph()
     G.add_nodes_from(vols)
@@ -54,19 +59,17 @@ def create_graph_noisy(vols, noise_budget=0):
         for j in range(window_down, window_up):
             guess.append(j)
             
-    #print(vols)
     for i in vols:
         temp_vols = vols[:]
-        #temp_vols.remove(i)
         for j in temp_vols:
-            temp_vols2 = temp_vols[:]
-            #temp_vols2.remove(j)
             if abs(j-i) in guess:
                 G.add_edge(i, j, weight=4.7)
     return G, guess
 
 
-# given an array (usually of primitive ranges [1-1], [1-2], [1-3]...) return the differences between pairs of neighbours
+# given an array (usually of primitive ranges [1-1], [1-2], [1-3]...) return 
+# the differences between pairs of neighbours and as as result of that the 
+# returned list is in the form of [1-1], [2-2], [3,3], ... 
 def get_unary_ranges(arr):
     arr.sort()
     ranges = [arr[0]]
@@ -75,10 +78,9 @@ def get_unary_ranges(arr):
     return ranges
 
 
-volumes = []
 # The first returned result is the volumes in the sorted way and the second
 # returned result in the actual database
-def nodes_to_vols(nodes, volumes=volumes):
+def nodes_to_vols(nodes, volumes=[]):
     vols = nodes
     vols = sorted(vols)
 
