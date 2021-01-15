@@ -519,16 +519,17 @@ def match_extend(mode, H):
 # run the algorithm on all experiments and print out a report
 def general_test(mode, noise_budget_val, drop_num_val, seed_val):
     
-    experiments1 = ['nis2008_1', 'nis2008_2', 'nis2008_3', 'nis2008_4', 'nis2008_5',
-                    'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
+    experiments1 = ['nis2008_1', 'nis2008_2', 'nis2008_3', 'nis2008_4', 'nis2008_5', 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
 
-    experiments2 = ['nis2008_1_non_uniform_q', 'nis2008_2_non_uniform_q', 'nis2008_3_non_uniform_q', 'nis2008_4_non_uniform_q', 'nis2008_5_non_uniform_q', 
-                    'nis2008_6_non_uniform_q', 'nis2008_7_non_uniform_q', 'nis2008_8_non_uniform_q', 'nis2008_9_non_uniform_q', 'nis2008_10_non_uniform_q']
+    experiments2 = ['nis2008_1_non_uniform_q', 'nis2008_2_non_uniform_q', 'nis2008_3_non_uniform_q', 'nis2008_4_non_uniform_q', 'nis2008_5_non_uniform_q', 'nis2008_6_non_uniform_q', 'nis2008_7_non_uniform_q', 'nis2008_8_non_uniform_q', 'nis2008_9_non_uniform_q', 'nis2008_10_non_uniform_q']
 
-    experiments3 = ['nis2008_1_gauss' , 'nis2008_2_gauss', 'nis2008_3_gauss', 'nis2008_4_gauss', 'nis2008_5_gauss', 
-                    'nis2008_6_gauss', 'nis2008_7_gauss', 'nis2008_8_gauss', 'nis2008_9_gauss', 'nis2008_10_gauss']
+    experiments3 = ['nis2008_1_gauss' , 'nis2008_2_gauss', 'nis2008_3_gauss', 'nis2008_4_gauss', 'nis2008_5_gauss', 'nis2008_6_gauss', 'nis2008_7_gauss', 'nis2008_8_gauss', 'nis2008_9_gauss', 'nis2008_10_gauss']
 
-    experiments = experiments1 + experiments2 + experiments3
+    experiments4 = ['nis2008_10_m1']#, 'nis2008_7_m1', 'nis2008_8_m1']#, 'nis2008_4_m1', 'nis2008_5_m1']#, 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
+
+    experiments5 = ['nis2008_4_m2']#, 'nis2008_7_m2', 'nis2008_8_m2']#, 'nis2008_5_m2']#, 'nis2008_4_m2', 'nis2008_5_m2']#, 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
+
+    experiments = experiments5#experiments1 + experiments2 + experiments3
 
     global NOISE_BUDGET
     NOISE_BUDGET = noise_budget_val
@@ -562,6 +563,11 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
             drp = vols[0]
             vols.remove(drp)
             dropped.append(drp)
+            temp_vols = vols[:]
+            for j in temp_vols:
+                if abs(j-true_vol_dropped) < (NOISE_BUDGET * true_vol_dropped):
+                    vols.remove(j)
+                    dropped.append(j)
         vols.sort()
         dropped_vols.append(dropped)
 
@@ -592,8 +598,11 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
     # Print the report
     f_name = "report_{}.txt".format(drop_num)
     f = open(f_name, "a+")
-
+    f_name2 = "excel_{}.txt".format(drop_num)
+    f2 = open(f_name2, "a+")
+    f2.write('\n')
     template = "{0:25}{1:80}{2:10}" # column widths: 8, 80, 10
+    template2 = "{0:80}{1:5}{2:80}{3:5}" # column widths: 8, 80, 10
     f.write('-------- Report --------\n')
     f.write(template.format("Exp Name", "db", "description\n"))# header
     for i, ex_name in enumerate(experiments):
@@ -602,18 +611,25 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
             if np.linalg.norm(g-d) > np.linalg.norm(np.flip(g)-d):
                 g = np.flip(g)
             v_diff = list(g-d)
+            v_diff2 = [abs(i) for i in v_diff]
             diff_norm = np.linalg.norm(np.array(v_diff)/np.array(d))
             f.write(template.format(ex_name, str(dbs[i]), 'real db\n'))
             f.write(template.format('', str(list(g)), 'guess\n'))
             f.write(template.format('', str(v_diff), 'diff\n'))
             f.write(template.format('', str(diff_norm), 'diff_norm\n'))
             f.write(template.format('', str(runtimes[i]), 'runtime\n'))
+            f.write(template.format('', str(dropped_vols[i]), 'droppped\n'))
+
+            f2.write(template2.format(str(list(g)), '\t', str(v_diff2), '\n'))
         else:
             f.write(template.format(ex_name, str(dbs[i]), 'real db\n'))
             f.write(template.format('', str(list(g)), 'guess\n'))
-            f.write(template.format('', str(runtimes[i]), 'runtime\n'))
+            f.write(template.format('', str(dropped_vols[i]), 'runtime\n'))
+
+            f2.write(template2.format(str(list(g)), '\n'))
         
     f.close()
+    f2.close()
 
     return
 

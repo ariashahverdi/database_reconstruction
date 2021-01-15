@@ -1,2 +1,8 @@
-# Drop 5 volumes with starting seed of 10
-python main.py 'clique' 0.002 5 10
+#!/bin/bash
+for j in {1..4}
+do
+    for i in {1..10}
+    do
+        python main.py 'me' 0.002 $j $i
+    done
+done
