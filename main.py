@@ -433,6 +433,7 @@ def match_extend(mode, H):
     while True:
         # We store the clique number k and the number of cliques of size k at 
         # each step of the algorithm
+        #pdb.set_trace()
         cliques_info = {}
         for j in [k, k-1, k-2, k-3, k-4]:
             cliques_info[j] = len([c for c in all_cliques if len(c) == j])
@@ -525,7 +526,7 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
 
     experiments3 = ['nis2008_1_gauss' , 'nis2008_2_gauss', 'nis2008_3_gauss', 'nis2008_4_gauss', 'nis2008_5_gauss', 'nis2008_6_gauss', 'nis2008_7_gauss', 'nis2008_8_gauss', 'nis2008_9_gauss', 'nis2008_10_gauss']
 
-    experiments4 = ['nis2008_3_m2']#, 'nis2008_7_m1', 'nis2008_8_m1']#, 'nis2008_4_m1', 'nis2008_5_m1']#, 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
+    experiments4 = ['nis2008_4_m2']#, 'nis2008_7_m1', 'nis2008_8_m1']#, 'nis2008_4_m1', 'nis2008_5_m1']#, 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
 
     experiments5 = ['nis2008_4_m2']#, 'nis2008_7_m2', 'nis2008_8_m2']#, 'nis2008_5_m2']#, 'nis2008_4_m2', 'nis2008_5_m2']#, 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
 
