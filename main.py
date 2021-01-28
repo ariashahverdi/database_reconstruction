@@ -522,7 +522,7 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
     
     experiments1 = ['nis2008_1', 'nis2008_2', 'nis2008_3', 'nis2008_4', 'nis2008_5', 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
 
-    experiments2 = ['nis2008_14_non_uniform_q']#, 'nis2008_2_non_uniform_q', 'nis2008_3_non_uniform_q', 'nis2008_4_non_uniform_q', 'nis2008_5_non_uniform_q', 'nis2008_6_non_uniform_q', 'nis2008_7_non_uniform_q', 'nis2008_8_non_uniform_q', 'nis2008_9_non_uniform_q', 'nis2008_10_non_uniform_q']
+    experiments2 = ['nis2008_18_non_uniform_q']#,'nis2008_15_non_uniform_q', 'nis2008_16_non_uniform_q','nis2008_18_non_uniform_q']#, 'nis2008_2_non_uniform_q', 'nis2008_3_non_uniform_q', 'nis2008_4_non_uniform_q', 'nis2008_5_non_uniform_q', 'nis2008_6_non_uniform_q', 'nis2008_7_non_uniform_q', 'nis2008_8_non_uniform_q', 'nis2008_9_non_uniform_q', 'nis2008_10_non_uniform_q']
 
     experiments3 = ['nis2008_1_gauss' , 'nis2008_2_gauss', 'nis2008_3_gauss', 'nis2008_4_gauss', 'nis2008_5_gauss', 'nis2008_6_gauss', 'nis2008_7_gauss', 'nis2008_8_gauss', 'nis2008_9_gauss', 'nis2008_10_gauss']
 
@@ -530,7 +530,7 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
 
     experiments5 = ['nis2008_4_m2']#, 'nis2008_7_m2', 'nis2008_8_m2']#, 'nis2008_5_m2']#, 'nis2008_4_m2', 'nis2008_5_m2']#, 'nis2008_6', 'nis2008_7', 'nis2008_8', 'nis2008_9', 'nis2008_10']
 
-    experiments = experiments4#experiments1 + experiments2 + experiments3
+    experiments = experiments2#experiments1 + experiments2 + experiments3
 
     global NOISE_BUDGET
     NOISE_BUDGET = noise_budget_val
@@ -627,7 +627,7 @@ def general_test(mode, noise_budget_val, drop_num_val, seed_val):
             f.write(template.format('', str(list(g)), 'guess\n'))
             f.write(template.format('', str(dropped_vols[i]), 'runtime\n'))
 
-            f2.write(template2.format(str(list(g)), '\n'))
+            #f2.write(template2.format(str(list(g)), '\n'))
         
     f.close()
     f2.close()
