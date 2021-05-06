@@ -1,0 +1,21 @@
+sibling cores:
+ cat /sys/devices/system/cpu/cpu0/topology/thread_siblings_list
+
+
+///////////////////////////////////////////////////////////
+Using gcov to Find Potential Lines
+
+1. gcc -c -fPIC sqlite3.c -g -fprofile-arcs -ftest-coverage -L /usr/lib -I /usr/include
+2. gcc -shared -o libsqlite3.so -fPIC sqlite3.o -g -fprofile-arcs -ftest-coverage -L /usr/lib -I /usr/include
+3. gcc generic_query.c libsqlite3.so -o generic_query -lpthread -ldl -g -fprofile-arcs -ftest-coverage -L /usr/lib -I /usr/include
+4. ./generic_query db/nis2008_1.db "Select * From Test Where Val Between 1 AND 8"
+5. gcov sqlite3.c 
+6. gcov generic_query.c 
+7. lcov -c -d . -o main_coverage.info
+8. genhtml main_coverage.info --output-directory out
+
+
+///////////////////////////////////////////////////////////
+Running Noisy Process (Make Sure you have stress installed)
+
+stress -m 8
