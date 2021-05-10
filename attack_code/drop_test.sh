@@ -1,8 +1,8 @@
 #!/bin/bash
-for j in {1..4}
+for i in {1..10}
 do
-    for i in {1..10}
+    for j in 1 2 4 6 8
     do
-        python main.py 'me' 0.002 $j $i
+        python main_drop.py 'me' 0.002 $j $i
     done
 done
