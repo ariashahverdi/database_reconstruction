@@ -2,7 +2,7 @@ You can access the paper on [Arxiv](https://arxiv.org/abs/2006.15007)
 
 
 There are two main directories. 
-## measurement_code/
+## measurement_code
 - *commands.txt* : Contains the command to get gcov running and simulating noide
 - *compile.sh* : run it to compile the neccessary programs
 - *generic_query.c* : you can run ./generic_query "db_name" "SQL command" to run the query on your database
@@ -15,7 +15,7 @@ There are two main directories.
 - *Traces/* : The traces gathered using run_fr.sh will be saved in Traces/Test
 
 
-## attack_code/
+## attack_code
 
 Make sure you have **networkx** package installed. The main program can be run as follows.
 
